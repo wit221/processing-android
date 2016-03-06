@@ -73,6 +73,7 @@ import processing.event.Event;
 import processing.event.MouseEvent;
 import processing.event.TouchEvent;
 import processing.opengl.PGL;
+import processing.opengl.PGLES;
 import processing.opengl.PGraphics2D;
 import processing.opengl.PGraphics3D;
 import processing.opengl.PGraphicsOpenGL;
@@ -135,12 +136,10 @@ public class PApplet
   Random internalRandom;
   public char key;
   public int keyCode;
-  public processing.event.KeyEvent keyEvent;
   public boolean keyPressed;
   protected boolean looping;
   long millisOffset = System.currentTimeMillis();
   int motionPointerId;
-  public MouseEvent mouseEvent;
   public boolean mousePressed;
   public int mouseX;
   public int mouseY;
@@ -306,6 +305,19 @@ public class PApplet
     return (int)Math.ceil(paramFloat);
   }
   
+  public static String checkExtension(String paramString)
+  {
+    String str = paramString;
+    if (paramString.toLowerCase().endsWith(".gz")) {
+      str = paramString.substring(0, paramString.length() - 3);
+    }
+    int i = str.lastIndexOf('.');
+    if (i != -1) {
+      return str.substring(i + 1).toLowerCase();
+    }
+    return null;
+  }
+  
   public static Object concat(Object paramObject1, Object paramObject2)
   {
     Object localObject = paramObject1.getClass().getComponentType();
@@ -411,6 +423,25 @@ public class PApplet
     {
       System.err.println("Could not createInput() for " + paramFile);
       localIOException.printStackTrace();
+    }
+    return null;
+  }
+  
+  public static OutputStream createOutput(File paramFile)
+  {
+    try
+    {
+      FileOutputStream localFileOutputStream = new FileOutputStream(paramFile);
+      if (paramFile.getName().toLowerCase().endsWith(".gz"))
+      {
+        paramFile = new GZIPOutputStream(localFileOutputStream);
+        return paramFile;
+      }
+      return localFileOutputStream;
+    }
+    catch (IOException paramFile)
+    {
+      paramFile.printStackTrace();
     }
     return null;
   }
@@ -764,6 +795,48 @@ public class PApplet
     return null;
   }
   
+  public static String[] loadStrings(BufferedReader paramBufferedReader)
+  {
+    for (;;)
+    {
+      Object localObject;
+      int i;
+      String str;
+      try
+      {
+        localObject = new String[100];
+        i = 0;
+        str = paramBufferedReader.readLine();
+        if (str != null)
+        {
+          if (i == localObject.length)
+          {
+            String[] arrayOfString = new String[i << 1];
+            System.arraycopy(localObject, 0, arrayOfString, 0, i);
+            localObject = arrayOfString;
+          }
+        }
+        else
+        {
+          paramBufferedReader.close();
+          if (i == localObject.length) {
+            return (String[])localObject;
+          }
+          paramBufferedReader = new String[i];
+          System.arraycopy(localObject, 0, paramBufferedReader, 0, i);
+          return paramBufferedReader;
+        }
+      }
+      catch (IOException paramBufferedReader)
+      {
+        paramBufferedReader.printStackTrace();
+        return null;
+      }
+      localObject[i] = str;
+      i += 1;
+    }
+  }
+  
   public static String[] loadStrings(File paramFile)
   {
     paramFile = createInput(paramFile);
@@ -814,25 +887,6 @@ public class PApplet
       paramInputStream[i] = str;
       i += 1;
     }
-  }
-  
-  public static Table loadTable(File paramFile)
-  {
-    return new Table(paramFile);
-  }
-  
-  public static XML loadXML(File paramFile)
-  {
-    try
-    {
-      paramFile = new XML(paramFile);
-      return paramFile;
-    }
-    catch (Exception paramFile)
-    {
-      paramFile.printStackTrace();
-    }
-    return null;
   }
   
   public static final float log(float paramFloat)
@@ -2798,13 +2852,6 @@ public class PApplet
     this.g.ambientLight(paramFloat1, paramFloat2, paramFloat3, paramFloat4, paramFloat5, paramFloat6);
   }
   
-  public void andresNeedsBetterAPI()
-  {
-    if (this.looping) {
-      ((GLSurfaceView)this.surfaceView).requestRender();
-    }
-  }
-  
   public void applyMatrix(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4, float paramFloat5, float paramFloat6)
   {
     this.g.applyMatrix(paramFloat1, paramFloat2, paramFloat3, paramFloat4, paramFloat5, paramFloat6);
@@ -2983,6 +3030,16 @@ public class PApplet
   public void camera(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4, float paramFloat5, float paramFloat6, float paramFloat7, float paramFloat8, float paramFloat9)
   {
     this.g.camera(paramFloat1, paramFloat2, paramFloat3, paramFloat4, paramFloat5, paramFloat6, paramFloat7, paramFloat8, paramFloat9);
+  }
+  
+  public boolean canDraw()
+  {
+    return (this.g != null) && (this.surfaceReady) && (!this.paused) && ((this.looping) || (this.redraw));
+  }
+  
+  public void clear()
+  {
+    this.g.clear();
   }
   
   public void clip(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4)
@@ -3592,9 +3649,28 @@ public class PApplet
     return this.g.createShape(paramPShape);
   }
   
+  public Table createTable()
+  {
+    return new Table();
+  }
+  
   public PrintWriter createWriter(String paramString)
   {
     return createWriter(saveFile(paramString));
+  }
+  
+  public XML createXML(String paramString)
+  {
+    try
+    {
+      paramString = new XML(paramString);
+      return paramString;
+    }
+    catch (Exception paramString)
+    {
+      paramString.printStackTrace();
+    }
+    return null;
   }
   
   public void curve(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4, float paramFloat5, float paramFloat6, float paramFloat7, float paramFloat8)
@@ -3720,8 +3796,6 @@ public class PApplet
     }
     handleMethods("dispose");
   }
-  
-  protected void dragEvent() {}
   
   public void draw()
   {
@@ -3928,6 +4002,11 @@ public class PApplet
     return this.surfaceView.getHolder();
   }
   
+  public SurfaceView getSurfaceView()
+  {
+    return this.surfaceView;
+  }
+  
   public final float green(int paramInt)
   {
     return this.g.green(paramInt);
@@ -3949,17 +4028,17 @@ public class PApplet
       this.surfaceReady = true;
     }
     long l;
-    if ((this.g != null) && (this.surfaceReady) && (!this.paused) && ((this.looping) || (this.redraw)))
+    if (canDraw())
     {
       this.g.beginDraw();
       l = System.nanoTime();
       if (this.frameCount != 0) {
-        break label168;
+        break label140;
       }
     }
     for (;;)
     {
-      label168:
+      label140:
       try
       {
         setup();
@@ -3989,7 +4068,6 @@ public class PApplet
   
   protected void handleKeyEvent(processing.event.KeyEvent paramKeyEvent)
   {
-    this.keyEvent = paramKeyEvent;
     this.key = paramKeyEvent.getKey();
     this.keyCode = paramKeyEvent.getKeyCode();
     switch (paramKeyEvent.getAction())
@@ -3998,15 +4076,12 @@ public class PApplet
     for (;;)
     {
       handleMethods("keyEvent", new Object[] { paramKeyEvent });
-      if ((paramKeyEvent.getAction() == 1) && (paramKeyEvent.getKeyCode() == 4)) {
-        exit();
-      }
       return;
       this.keyPressed = true;
-      keyPressed();
+      keyPressed(paramKeyEvent);
       continue;
       this.keyPressed = false;
-      keyReleased();
+      keyReleased(paramKeyEvent);
     }
   }
   
@@ -4028,7 +4103,6 @@ public class PApplet
   
   protected void handleMouseEvent(MouseEvent paramMouseEvent)
   {
-    this.mouseEvent = paramMouseEvent;
     if ((paramMouseEvent.getAction() == 4) || (paramMouseEvent.getAction() == 5))
     {
       this.pmouseX = this.emouseX;
@@ -4071,19 +4145,19 @@ public class PApplet
       break;
       this.mousePressed = false;
       break;
-      mousePressed();
+      mousePressed(paramMouseEvent);
       continue;
-      mouseReleased();
+      mouseReleased(paramMouseEvent);
       continue;
-      mouseClicked();
+      mouseClicked(paramMouseEvent);
       continue;
-      mouseDragged();
+      mouseDragged(paramMouseEvent);
       continue;
-      mouseMoved();
+      mouseMoved(paramMouseEvent);
       continue;
-      mouseEntered();
+      mouseEntered(paramMouseEvent);
       continue;
-      mouseExited();
+      mouseExited(paramMouseEvent);
     }
   }
   
@@ -4142,9 +4216,24 @@ public class PApplet
   
   public void keyPressed() {}
   
+  public void keyPressed(processing.event.KeyEvent paramKeyEvent)
+  {
+    keyPressed();
+  }
+  
   public void keyReleased() {}
   
+  public void keyReleased(processing.event.KeyEvent paramKeyEvent)
+  {
+    keyReleased();
+  }
+  
   public void keyTyped() {}
+  
+  public void keyTyped(processing.event.KeyEvent paramKeyEvent)
+  {
+    keyTyped();
+  }
   
   public int lerpColor(int paramInt1, int paramInt2, float paramFloat)
   {
@@ -4216,42 +4305,42 @@ public class PApplet
     // Byte code:
     //   0: aload_0
     //   1: aload_1
-    //   2: invokevirtual 1721	processing/core/PApplet:createInput	(Ljava/lang/String;)Ljava/io/InputStream;
+    //   2: invokevirtual 1710	processing/core/PApplet:createInput	(Ljava/lang/String;)Ljava/io/InputStream;
     //   5: astore_2
     //   6: aload_2
     //   7: ifnonnull +37 -> 44
-    //   10: getstatic 519	java/lang/System:err	Ljava/io/PrintStream;
-    //   13: new 433	java/lang/StringBuilder
+    //   10: getstatic 522	java/lang/System:err	Ljava/io/PrintStream;
+    //   13: new 429	java/lang/StringBuilder
     //   16: dup
-    //   17: invokespecial 434	java/lang/StringBuilder:<init>	()V
-    //   20: ldc_w 2160
-    //   23: invokevirtual 439	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    //   17: invokespecial 430	java/lang/StringBuilder:<init>	()V
+    //   20: ldc_w 2162
+    //   23: invokevirtual 435	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
     //   26: aload_1
-    //   27: invokevirtual 439	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    //   30: ldc_w 1148
-    //   33: invokevirtual 439	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    //   36: invokevirtual 443	java/lang/StringBuilder:toString	()Ljava/lang/String;
-    //   39: invokevirtual 529	java/io/PrintStream:println	(Ljava/lang/String;)V
+    //   27: invokevirtual 435	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    //   30: ldc_w 1138
+    //   33: invokevirtual 435	java/lang/StringBuilder:append	(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    //   36: invokevirtual 439	java/lang/StringBuilder:toString	()Ljava/lang/String;
+    //   39: invokevirtual 532	java/io/PrintStream:println	(Ljava/lang/String;)V
     //   42: aconst_null
     //   43: areturn
     //   44: aload_2
-    //   45: invokestatic 2166	android/graphics/BitmapFactory:decodeStream	(Ljava/io/InputStream;)Landroid/graphics/Bitmap;
+    //   45: invokestatic 2168	android/graphics/BitmapFactory:decodeStream	(Ljava/io/InputStream;)Landroid/graphics/Bitmap;
     //   48: astore_1
     //   49: aload_2
-    //   50: invokevirtual 2169	java/io/InputStream:close	()V
-    //   53: new 447	processing/core/PImage
+    //   50: invokevirtual 2171	java/io/InputStream:close	()V
+    //   53: new 443	processing/core/PImage
     //   56: dup
     //   57: aload_1
-    //   58: invokespecial 2171	processing/core/PImage:<init>	(Ljava/lang/Object;)V
+    //   58: invokespecial 2173	processing/core/PImage:<init>	(Ljava/lang/Object;)V
     //   61: astore_1
     //   62: aload_1
     //   63: aload_0
-    //   64: putfield 1655	processing/core/PImage:parent	Lprocessing/core/PApplet;
+    //   64: putfield 1645	processing/core/PImage:parent	Lprocessing/core/PApplet;
     //   67: aload_1
     //   68: areturn
     //   69: astore_1
     //   70: aload_2
-    //   71: invokevirtual 2169	java/io/InputStream:close	()V
+    //   71: invokevirtual 2171	java/io/InputStream:close	()V
     //   74: aload_1
     //   75: athrow
     //   76: astore_2
@@ -4305,19 +4394,59 @@ public class PApplet
   
   public Table loadTable(String paramString)
   {
-    return new Table(this, paramString);
+    return loadTable(paramString, null);
+  }
+  
+  public Table loadTable(String paramString1, String paramString2)
+  {
+    for (;;)
+    {
+      String str2;
+      try
+      {
+        str2 = checkExtension(paramString1);
+        str1 = paramString2;
+        if (str2 != null)
+        {
+          if (str2.equals("csv")) {
+            break label90;
+          }
+          str1 = paramString2;
+          if (str2.equals("tsv")) {
+            break label90;
+          }
+        }
+        return new Table(createInput(paramString1), str1);
+      }
+      catch (IOException paramString1)
+      {
+        paramString1.printStackTrace();
+        return null;
+      }
+      String str1 = str2 + "," + paramString2;
+      continue;
+      label90:
+      if (paramString2 == null) {
+        str1 = str2;
+      }
+    }
   }
   
   public XML loadXML(String paramString)
   {
+    return loadXML(paramString, null);
+  }
+  
+  public XML loadXML(String paramString1, String paramString2)
+  {
     try
     {
-      paramString = new XML(this, paramString);
-      return paramString;
+      paramString1 = new XML(createInput(paramString1), paramString2);
+      return paramString1;
     }
-    catch (Exception paramString)
+    catch (Exception paramString1)
     {
-      paramString.printStackTrace();
+      paramString1.printStackTrace();
     }
     return null;
   }
@@ -4403,19 +4532,52 @@ public class PApplet
   
   public void mouseClicked() {}
   
+  public void mouseClicked(MouseEvent paramMouseEvent)
+  {
+    mouseClicked();
+  }
+  
   public void mouseDragged() {}
+  
+  public void mouseDragged(MouseEvent paramMouseEvent)
+  {
+    mouseDragged();
+  }
   
   public void mouseEntered() {}
   
+  public void mouseEntered(MouseEvent paramMouseEvent)
+  {
+    mouseEntered();
+  }
+  
   public void mouseExited() {}
+  
+  public void mouseExited(MouseEvent paramMouseEvent)
+  {
+    mouseExited();
+  }
   
   public void mouseMoved() {}
   
+  public void mouseMoved(MouseEvent paramMouseEvent)
+  {
+    mouseMoved();
+  }
+  
   public void mousePressed() {}
+  
+  public void mousePressed(MouseEvent paramMouseEvent)
+  {
+    mousePressed();
+  }
   
   public void mouseReleased() {}
   
-  protected void moveEvent() {}
+  public void mouseReleased(MouseEvent paramMouseEvent)
+  {
+    mouseReleased();
+  }
   
   protected void nativeKeyEvent(android.view.KeyEvent paramKeyEvent)
   {
@@ -4436,11 +4598,7 @@ public class PApplet
     if (n == 0) {}
     for (;;)
     {
-      paramKeyEvent = new processing.event.KeyEvent(paramKeyEvent, paramKeyEvent.getEventTime(), k, 0, i, m);
-      if ((n == 0) && (m == 4)) {
-        exit();
-      }
-      postEvent(paramKeyEvent);
+      postEvent(new processing.event.KeyEvent(paramKeyEvent, paramKeyEvent.getEventTime(), k, 0, i, m));
       return;
       if (n == 1) {
         k = 2;
@@ -4671,6 +4829,11 @@ public class PApplet
     this.g.normal(paramFloat1, paramFloat2, paramFloat3);
   }
   
+  public void onBackPressed()
+  {
+    exit();
+  }
+  
   public void onConfigurationChanged(Configuration paramConfiguration)
   {
     super.onConfigurationChanged(paramConfiguration);
@@ -4782,6 +4945,25 @@ public class PApplet
     this.g.ortho(paramFloat1, paramFloat2, paramFloat3, paramFloat4, paramFloat5, paramFloat6);
   }
   
+  public XML parseXML(String paramString)
+  {
+    return parseXML(paramString, null);
+  }
+  
+  public XML parseXML(String paramString1, String paramString2)
+  {
+    try
+    {
+      paramString1 = XML.parse(paramString1, paramString2);
+      return paramString1;
+    }
+    catch (Exception paramString1)
+    {
+      paramString1.printStackTrace();
+    }
+    return null;
+  }
+  
   public void pause() {}
   
   public void perspective()
@@ -4826,8 +5008,6 @@ public class PApplet
       dequeueEvents();
     }
   }
-  
-  protected void pressEvent() {}
   
   public void printCamera()
   {
@@ -4991,8 +5171,6 @@ public class PApplet
   {
     System.err.println("The registerSize() command is no longer supported.");
   }
-  
-  protected void releaseEvent() {}
   
   public void removeCache(PImage paramPImage)
   {
@@ -5171,6 +5349,35 @@ public class PApplet
   public void saveStrings(String paramString, String[] paramArrayOfString)
   {
     saveStrings(saveFile(paramString), paramArrayOfString);
+  }
+  
+  public boolean saveTable(Table paramTable, String paramString)
+  {
+    return saveTable(paramTable, paramString, null);
+  }
+  
+  public boolean saveTable(Table paramTable, String paramString1, String paramString2)
+  {
+    try
+    {
+      paramTable.save(saveFile(paramString1), paramString2);
+      return true;
+    }
+    catch (IOException paramTable)
+    {
+      paramTable.printStackTrace();
+    }
+    return false;
+  }
+  
+  public boolean saveXML(XML paramXML, String paramString)
+  {
+    return saveXML(paramXML, paramString, null);
+  }
+  
+  public boolean saveXML(XML paramXML, String paramString1, String paramString2)
+  {
+    return paramXML.save(saveFile(paramString1), paramString2);
   }
   
   public void scale(float paramFloat)
@@ -5491,10 +5698,6 @@ public class PApplet
     focusLost();
   }
   
-  protected void swipeEvent(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4) {}
-  
-  protected void tapEvent(float paramFloat1, float paramFloat2) {}
-  
   public void text(char paramChar, float paramFloat1, float paramFloat2)
   {
     this.g.text(paramChar, paramFloat1, paramFloat2);
@@ -5747,8 +5950,6 @@ public class PApplet
   {
     this.g.vertex(paramArrayOfFloat);
   }
-  
-  protected void zoomEvent(float paramFloat1, float paramFloat2, float paramFloat3, float paramFloat4) {}
   
   class AsyncImageLoader
     extends Thread
@@ -6052,7 +6253,7 @@ public class PApplet
         this.g3.setPrimary(true);
         this.g3.setSize(paramInt1, paramInt2);
         setEGLContextClientVersion(2);
-        setRenderer(this.g3.pgl.getRenderer());
+        setRenderer(((PGLES)this.g3.pgl).getRenderer());
         setRenderMode(0);
         PApplet.this.g = this.g3;
         setFocusable(true);
